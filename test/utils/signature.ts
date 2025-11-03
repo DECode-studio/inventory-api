@@ -1,7 +1,7 @@
 import { createHmac } from 'crypto';
 
 
-export interface SignatureHeaders {
+export interface SignatureHeaders extends Record<string, string> {
   'x-api-key-id': string;
   'x-api-ts': string;
   'x-api-sig': string;

@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { json, urlencoded } from 'express';
-import * as request from 'supertest';
+import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { ensureDatabaseUrl } from '../src/prisma/prisma.utils';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -187,6 +187,7 @@ if (!databaseUrl) {
           expect(body).toHaveProperty('id');
           expect(body).toHaveProperty('kode');
           expect(body).toHaveProperty('stok', '10');
+          expect(body).toHaveProperty('harga', '15000');
           barangId = body.id;
         });
 
@@ -214,7 +215,7 @@ if (!databaseUrl) {
       })
         .expect(201)
         .expect(({ body }) => {
-          expect(body).toMatchObject({ barangId, harga: priceDto.harga });
+          expect(body).toMatchObject({ barangId, harga: priceDto.harga, effectiveDate: priceDto.tanggalBerlaku });
         });
 
       await signedRequest('GET', '/api/barang/report/stock', {
