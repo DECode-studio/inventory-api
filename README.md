@@ -1,98 +1,113 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Inventory API (NestJS + PostgreSQL)
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+API ini menyediakan manajemen pengguna dan master barang lengkap dengan autentikasi JWT, otorisasi berbasis signature HMAC, manajemen stok, histori harga, serta dokumentasi Swagger. Stack data layer kini menggunakan Prisma ORM di atas PostgreSQL.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Fitur Utama
+- NestJS + Prisma dengan PostgreSQL (konfigurasi lewat variabel lingkungan).
+- Tabel `users` dengan CRUD + login (hash password BCrypt).
+- Modul `barang` dengan kode otomatis (`BRG/YY/MM/XXXXX`), upload foto, stok, dan harga.
+- Penyesuaian stok via ledger serta histori harga per tanggal.
+- Seluruh endpoint (kecuali Swagger docs) divalidasi menggunakan signature HMAC dan memerlukan JWT.
+- Swagger tersedia di `/docs` untuk eksplorasi dan uji coba.
 
-## Description
+## Langkah Setup
+1. **Persiapan Database**
+   - Jalankan PostgreSQL dan buat database kosong, misal `inventory`.
+2. **Buat berkas `.env` di root proyek** sesuai contoh berikut (opsional Anda juga bisa langsung mengisi `DATABASE_URL` ala Prisma):
+   ```bash
+   PORT=3000
+   DB_HOST=localhost
+   DB_PORT=5432
+   DB_USER=postgres
+   DB_PASS=postgres
+   DB_NAME=inventory
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+   JWT_SECRET=super-secret-jwt
+   JWT_EXPIRES=1d
 
-## Project setup
+   API_KEY_ID=sample-key
+   API_SECRET=sample-secret
+   API_SIG_TTL=300
+   ```
+   Jika `DATABASE_URL` belum di-set, aplikasi akan merangkai URL otomatis dari variabel di atas.
+3. **Instal dependensi**
+   ```bash
+   pnpm install
+   ```
+4. **Generate client Prisma**
+   ```bash
+   pnpm prisma:generate
+   ```
+5. **Siapkan skema database**
+   ```bash
+   pnpm prisma:migrate:dev
+   ```
+   Perintah ini membaca `prisma/schema.prisma` dan membuat tabel sesuai kebutuhan aplikasi.
+6. **Jalankan server**
+   ```bash
+   pnpm run start:dev
+   ```
+   Prisma bergantung pada koneksi yang sudah dimigrasikan.
 
+## Autentikasi & Signature
+1. **Register & Login**
+   - `POST /api/auth/register`
+   - `POST /api/auth/login` → respon `{ "access_token": "<JWT>" }`
+2. **Header Wajib**
+   - `Authorization: Bearer <JWT>`
+   - `x-api-key-id: <API_KEY_ID>`
+   - `x-api-ts: <unix timestamp detik>`
+   - `x-api-sig: <signature>`
+3. **Cara Hitung Signature**
+   ```
+   payload = `${METHOD}\n${PATH}\n${BODY_JSON}\n${TIMESTAMP}`
+   signature = HMAC_SHA256(API_SECRET, payload) -> hex lowercase
+   ```
+   - `PATH` harus relatif terhadap host, termasuk prefix `/api`.
+   - `BODY_JSON` adalah string JSON persis seperti yang dikirim (gunakan string kosong `""` untuk body kosong).
+   - Untuk request `multipart/form-data`, gunakan JSON dari field teks yang dikirim (file tidak perlu dihitung).
+   - Pastikan `x-api-ts` berada dalam rentang `±API_SIG_TTL` detik dari waktu server.
+
+Contoh cepat memakai Node.js:
 ```bash
-$ pnpm install
+TIMESTAMP=$(date +%s)
+PAYLOAD='{"username":"admin","password":"secret"}'
+SIGNATURE=$(node -e "const crypto=require('crypto');const secret=process.env.API_SECRET;const payload=['POST','/api/auth/login','$PAYLOAD','$TIMESTAMP'].join('\n');console.log(crypto.createHmac('sha256', secret).update(payload).digest('hex'))" )
+curl -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -H "x-api-key-id: $API_KEY_ID" \
+  -H "x-api-ts: $TIMESTAMP" \
+  -H "x-api-sig: $SIGNATURE" \
+  -d '$PAYLOAD'
 ```
 
-## Compile and run the project
+## Endpoint Barang (ringkasan)
+- `POST /api/barang` (multipart) → buat barang baru; field: `nama`, opsional `stok`, `harga`, `foto`.
+- `GET /api/barang` → daftar barang.
+- `GET /api/barang/:id` → detail barang.
+- `PATCH /api/barang/:id` (multipart) → ubah data barang.
+- `DELETE /api/barang/:id` → hapus barang.
+- `POST /api/barang/:id/stock` → tambah/kurangi stok (`delta`, `note?`, `txnDate?`).
+- `POST /api/barang/:id/price` → set harga per tanggal (`harga`, `tanggalBerlaku`).
+- `GET /api/barang/report/stock?date=YYYY-MM-DD` → total stok kumulatif per barang.
+- `GET /api/barang/report/price?date=YYYY-MM-DD` → harga berlaku per barang pada tanggal tertentu.
 
-```bash
-# development
-$ pnpm run start
+Upload file disimpan pada folder `uploads/` (dibuat otomatis). Properti `fotoPath` pada respons berisi path relatif menuju file tersebut.
 
-# watch mode
-$ pnpm run start:dev
+## Swagger
+Akses dokumentasi dan uji coba API melalui `http://localhost:3000/docs`. Saat mencoba endpoint dari Swagger UI:
+- Isi `Authorize` → `Bearer` token dengan JWT.
+- Tambahkan header signature (`x-api-key-id`, `x-api-ts`, `x-api-sig`) pada setiap request secara manual.
 
-# production mode
-$ pnpm run start:prod
-```
+## Pengembangan & Pengujian
+- Jalankan lint: `pnpm run lint`
+- Build production: `pnpm run build`
+- Unit test: `pnpm test`
+- E2E test (membutuhkan PostgreSQL aktif + skema Prisma sudah dimigrasikan):
+  ```bash
+  pnpm prisma:migrate:dev   # pastikan sekali sebelum test
+  pnpm run test:e2e
+  ```
+  Test otomatis akan dilewati apabila variabel koneksi database belum di-set.
 
-## Run tests
-
-```bash
-# unit tests
-$ pnpm run test
-
-# e2e tests
-$ pnpm run test:e2e
-
-# test coverage
-$ pnpm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+Selamat mencoba!

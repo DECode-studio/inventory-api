@@ -1,20 +1,23 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
-import { User } from './entities/user.entity';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 
 
+const expiresInEnv = process.env.JWT_EXPIRES;
+const expiresIn: string | number = expiresInEnv
+    ? (Number.isFinite(Number(expiresInEnv)) ? Number(expiresInEnv) : expiresInEnv)
+    : '1d';
+
+
 @Module({
     imports: [
-        TypeOrmModule.forFeature([User]),
         PassportModule,
         JwtModule.register({
             secret: process.env.JWT_SECRET,
-            signOptions: { expiresIn: process.env.JWT_EXPIRES || '1d' },
+            signOptions: { expiresIn: expiresIn as any },
         }),
     ],
     providers: [AuthService, JwtStrategy],

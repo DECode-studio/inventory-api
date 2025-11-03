@@ -3,10 +3,20 @@ import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { json, urlencoded } from 'express';
+
+
+const rawBodySaver = (req: any, _res: any, buf: Buffer) => {
+  if (buf?.length) {
+    req.rawBody = buf;
+  }
+};
 
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.use(json({ verify: rawBodySaver }));
+  app.use(urlencoded({ verify: rawBodySaver, extended: true }));
   app.setGlobalPrefix('api');
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 

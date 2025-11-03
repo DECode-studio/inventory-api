@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+
+model BarangCounter {
+  id      String @id @default(uuid())
+  yy      String @db.VarChar(2)
+  mm      String @db.VarChar(2)
+  counter Int    @default(0)
+
+  @@unique([yy, mm])
+  @@map("barang_counter")
+}
+
+
+model Barang {
+  id        String         @id @default(uuid())
+  nama      String         @db.VarChar(128)
+  kode      String         @unique @db.VarChar(20)
+  fotoPath  String?        @db.VarChar(255) @map("foto_path")
+  stok      Int            @default(0)
+  harga     Decimal?       @db.Decimal(18, 2)
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+  prices    PriceHistory[]
+  stocks    StockLedger[]
+
+  @@map("barang")
+}
+
+
+model PriceHistory {
+  id            String   @id @default(uuid())
+  barangId      String   @map("barang_id")
+  harga         Decimal  @db.Decimal(18, 2)
+  effectiveDate DateTime @map("effective_date") @db.Date
+  createdAt     DateTime @default(now()) @map("created_at")
+  barang        Barang   @relation(fields: [barangId], references: [id], onDelete: Cascade)
+
+  @@index([barangId, effectiveDate])
+  @@map("price_history")
+}
+
+
+model StockLedger {
+  id        String   @id @default(uuid())
+  barangId  String   @map("barang_id")
+  delta     Int
+  txnDate   DateTime @map("txn_date") @db.Date
+  note      String?  @db.VarChar(128)
+  createdAt DateTime @default(now()) @map("created_at")
+  barang    Barang   @relation(fields: [barangId], references: [id], onDelete: Cascade)
+
+  @@index([barangId, txnDate])
+  @@map("stock_ledger")
+}
