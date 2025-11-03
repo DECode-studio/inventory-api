@@ -4,6 +4,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { json, urlencoded } from 'express';
+import type { Request, Response } from 'express';
 
 
 const rawBodySaver = (req: any, _res: any, buf: Buffer) => {
@@ -11,6 +12,9 @@ const rawBodySaver = (req: any, _res: any, buf: Buffer) => {
     req.rawBody = buf;
   }
 };
+
+
+let cachedServer: any;
 
 
 export async function bootstrap(isServerless = false) {
@@ -70,4 +74,13 @@ if (!process.env.SERVERLESS) {
     console.error('Failed to bootstrap Nest application', err);
     process.exit(1);
   });
+}
+
+
+export default async function handler(req: Request, res: Response) {
+  if (!cachedServer) {
+    const app = await bootstrap(true);
+    cachedServer = app.getHttpAdapter().getInstance();
+  }
+  return cachedServer(req, res);
 }
