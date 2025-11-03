@@ -13,7 +13,7 @@ const rawBodySaver = (req: any, _res: any, buf: Buffer) => {
 };
 
 
-async function bootstrap() {
+export async function bootstrap(isServerless = false) {
   const app = await NestFactory.create(AppModule);
   app.use(json({ verify: rawBodySaver }));
   app.use(urlencoded({ verify: rawBodySaver, extended: true }));
@@ -50,9 +50,24 @@ async function bootstrap() {
   SwaggerModule.setup('docs', app, document);
 
 
+  if (isServerless) {
+    await app.init();
+    console.log('Running in SERVERLESS mode');
+    return app;
+  }
+
+
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT') || 3000;
   await app.listen(port);
-  console.log(`Server running on http://localhost:${port}`);
+  console.log(`Running in NORMAL server mode on http://localhost:${port}`);
+  return app;
 }
-bootstrap();
+
+
+if (!process.env.SERVERLESS) {
+  bootstrap(false).catch((err) => {
+    console.error('Failed to bootstrap Nest application', err);
+    process.exit(1);
+  });
+}
